@@ -6,11 +6,15 @@ const uint8_t APCommand = 0x0a;
 const uint8_t ModeReport = 0x0a;
 const uint8_t StatusReport = 0x02;
 
-bool IsSimnetMessage(const tN2kMsg &Msg, unsigned long PGN, int Length) {
-  if (Msg.PGN != PGN || Msg.DataLen != Length) return false;
+bool HasSimnetHeader(const tN2kMsg &Msg, unsigned long PGN, int MinLength) {
+  if (Msg.PGN != PGN || Msg.DataLen < MinLength) return false;
   int Index = 0;
   // Reserved header bits need not be interpreted by receivers.
   return (Msg.Get2ByteUInt(Index) & 0xe7ffu) == (SimnetHeader & 0xe7ffu);
+}
+
+bool IsSimnetMessage(const tN2kMsg &Msg, unsigned long PGN, int ExactLength) {
+  return Msg.DataLen == ExactLength && HasSimnetHeader(Msg, PGN, ExactLength);
 }
 
 double GetSimnetAngle(const tN2kMsg &Msg, int &Index) {
@@ -71,6 +75,39 @@ bool ParseN2k130850(const tN2kMsg &N2kMsg, uint8_t &Address, tN2kSimnetAPEvent &
   return true;
 }
 
+bool ParseN2k130851(const tN2kMsg &N2kMsg, uint8_t &Address, tN2kSimnetAPEvent &Event,
+                   uint8_t &ReplyStatus, uint8_t &NetworkGroup) {
+  if (!HasSimnetHeader(N2kMsg, 130851L, 8)) return false;
+  if (N2kMsg.Data[5] != APCommand) return false;
+
+  Address = N2kMsg.Data[2];
+  NetworkGroup = N2kMsg.Data[4];
+  Event = static_cast<tN2kSimnetAPEvent>(N2kMsg.Data[6]);
+  ReplyStatus = N2kMsg.Data[7];
+  return true;
+}
+
+bool ParseN2k130856(const tN2kMsg &N2kMsg, uint8_t &AlarmId, uint8_t &AlarmState,
+                   uint16_t &AlarmCode, char *AlarmText, size_t AlarmTextSize) {
+  if (!HasSimnetHeader(N2kMsg, 130856L, 6)) return false;
+
+  AlarmId = N2kMsg.Data[2];
+  AlarmState = N2kMsg.Data[3];
+  int Index = 4;
+  AlarmCode = N2kMsg.Get2ByteUInt(Index);
+
+  if (AlarmText != nullptr && AlarmTextSize > 0) {
+    size_t outIdx = 0;
+    for (int i = 6; i < N2kMsg.DataLen && outIdx + 1 < AlarmTextSize; ++i) {
+      const uint8_t ch = N2kMsg.Data[i];
+      if (ch == 0x00 || ch == 0xff) break;
+      AlarmText[outIdx++] = static_cast<char>(ch);
+    }
+    AlarmText[outIdx] = '\0';
+  }
+  return true;
+}
+
 void SetN2k65305(tN2kMsg &N2kMsg, tN2kSimnetDeviceModel Model, uint16_t Mode) {
   SetDeviceReport(N2kMsg, Model, ModeReport);
   N2kMsg.Add2ByteUInt(Mode);
@@ -114,39 +151,5 @@ bool ParseN2k65341(const tN2kMsg &N2kMsg, tN2kSimnetAngleMode &Mode, double &Ang
   int Index = 6;
   Mode = static_cast<tN2kSimnetAngleMode>(N2kMsg.Data[4]);
   Angle = GetSimnetAngle(N2kMsg, Index);
-  return true;
-}
-
-void SetN2k127237(tN2kMsg &N2kMsg,
-                 tN2kOnOff RudderLimitExceeded, tN2kOnOff OffHeadingLimitExceeded,
-                 tN2kOnOff OffTrackLimitExceeded, tN2kOnOff Override,
-                 tN2kSteeringMode SteeringMode, tN2kTurnMode TurnMode,
-                 tN2kHeadingReference HeadingReference,
-                 tN2kRudderDirectionOrder CommandedRudderDirection,
-                 double CommandedRudderAngle, double HeadingToSteerCourse, double Track,
-                 double RudderLimit, double OffHeadingLimit, double RadiusOfTurnOrder,
-                 double RateOfTurnOrder, double OffTrackLimit, double VesselHeading) {
-  SetN2kPGN127237(N2kMsg, RudderLimitExceeded, OffHeadingLimitExceeded, OffTrackLimitExceeded,
-                 Override, SteeringMode, TurnMode, HeadingReference, CommandedRudderDirection,
-                 CommandedRudderAngle, HeadingToSteerCourse, Track, RudderLimit, OffHeadingLimit,
-                 RadiusOfTurnOrder, RateOfTurnOrder, OffTrackLimit, VesselHeading);
-}
-
-bool ParseN2k127237(const tN2kMsg &N2kMsg,
-                   tN2kOnOff &RudderLimitExceeded, tN2kOnOff &OffHeadingLimitExceeded,
-                   tN2kOnOff &OffTrackLimitExceeded, tN2kOnOff &Override,
-                   tN2kSteeringMode &SteeringMode, tN2kTurnMode &TurnMode,
-                   tN2kHeadingReference &HeadingReference,
-                   tN2kRudderDirectionOrder &CommandedRudderDirection,
-                   double &CommandedRudderAngle, double &HeadingToSteerCourse, double &Track,
-                   double &RudderLimit, double &OffHeadingLimit, double &RadiusOfTurnOrder,
-                   double &RateOfTurnOrder, double &OffTrackLimit, double &VesselHeading) {
-  if (N2kMsg.PGN != 127237L || N2kMsg.DataLen != 21) return false;
-  if (!ParseN2kPGN127237(N2kMsg, RudderLimitExceeded, OffHeadingLimitExceeded, OffTrackLimitExceeded,
-                       Override, SteeringMode, TurnMode, HeadingReference, CommandedRudderDirection,
-                       CommandedRudderAngle, HeadingToSteerCourse, Track, RudderLimit, OffHeadingLimit,
-                       RadiusOfTurnOrder, RateOfTurnOrder, OffTrackLimit, VesselHeading)) return false;
-  int Index = 5;
-  if (N2kMsg.Get2ByteUInt(Index) >= 0xfffd) HeadingToSteerCourse = N2kDoubleNA;
   return true;
 }

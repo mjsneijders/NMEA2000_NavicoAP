@@ -2,6 +2,7 @@
 #define N2K_NAVICO_AP_H
 
 #include "N2kMessages.h"
+#include <stddef.h>
 #include <stdint.h>
 
 enum tN2kSimnetAPEvent : uint8_t {
@@ -61,7 +62,7 @@ enum tN2kSimnetAngleMode : uint8_t {
   N2kSimnetAngleNoDrift = 0x0b
 };
 
-// PGN 130850: 11 bytes for mode commands, 12 for ChangeCourse.
+// PGN 130850: SimNet AP Command (11 bytes for mode commands, 12 for ChangeCourse).
 // Address is the pilot's address in the payload; CAN destination is broadcast.
 // CourseChangeAngle is an unsigned magnitude in radians, not degrees.
 void SetN2k130850(tN2kMsg &N2kMsg, uint8_t Address, tN2kSimnetAPEvent Event,
@@ -83,6 +84,27 @@ inline bool ParseN2kSimnetAPCommand(const tN2kMsg &N2kMsg, uint8_t &Address,
                                   tN2kSimnetAPEvent &Event, tN2kSimnetCourseDirection &Direction,
                                   double &CourseChangeAngle, uint8_t &NetworkGroup) {
   return ParseN2k130850(N2kMsg, Address, Event, Direction, CourseChangeAngle, NetworkGroup);
+}
+
+// PGN 130851: SimNet Event Reply / AP Command Reply (receive only, 11 or 12 bytes).
+// Address is the target controller's address echoed in the reply payload.
+bool ParseN2k130851(const tN2kMsg &N2kMsg, uint8_t &Address, tN2kSimnetAPEvent &Event,
+                   uint8_t &ReplyStatus, uint8_t &NetworkGroup);
+
+inline bool ParseN2kSimnetAPCommandReply(const tN2kMsg &N2kMsg, uint8_t &Address,
+                                       tN2kSimnetAPEvent &Event, uint8_t &ReplyStatus,
+                                       uint8_t &NetworkGroup) {
+  return ParseN2k130851(N2kMsg, Address, Event, ReplyStatus, NetworkGroup);
+}
+
+// PGN 130856: SimNet Alarm Message (receive only, variable length fast packet).
+// Copies the null-terminated alarm text into AlarmText (if AlarmText != nullptr and AlarmTextSize > 0).
+bool ParseN2k130856(const tN2kMsg &N2kMsg, uint8_t &AlarmId, uint8_t &AlarmState,
+                   uint16_t &AlarmCode, char *AlarmText, size_t AlarmTextSize);
+
+inline bool ParseN2kSimnetAlarm(const tN2kMsg &N2kMsg, uint8_t &AlarmId, uint8_t &AlarmState,
+                               uint16_t &AlarmCode, char *AlarmText, size_t AlarmTextSize) {
+  return ParseN2k130856(N2kMsg, AlarmId, AlarmState, AlarmCode, AlarmText, AlarmTextSize);
 }
 
 // PGN 65305: report 0x0a (mode flags) and report 0x02 (status).
@@ -122,28 +144,5 @@ inline void SetN2kSimnetAutopilotAngle(tN2kMsg &N2kMsg, tN2kSimnetAngleMode Mode
 inline bool ParseN2kSimnetAutopilotAngle(const tN2kMsg &N2kMsg, tN2kSimnetAngleMode &Mode, double &Angle) {
   return ParseN2k65341(N2kMsg, Mode, Angle);
 }
-
-// PGN 127237: use the library's field types and encoder/decoder.
-// Angles are radians, distances metres, rate of turn radians/second.
-// The library also provides Set/ParseN2kHeadingTrackControl descriptive aliases.
-void SetN2k127237(tN2kMsg &N2kMsg,
-                 tN2kOnOff RudderLimitExceeded, tN2kOnOff OffHeadingLimitExceeded,
-                 tN2kOnOff OffTrackLimitExceeded, tN2kOnOff Override,
-                 tN2kSteeringMode SteeringMode, tN2kTurnMode TurnMode,
-                 tN2kHeadingReference HeadingReference,
-                 tN2kRudderDirectionOrder CommandedRudderDirection,
-                 double CommandedRudderAngle, double HeadingToSteerCourse, double Track,
-                 double RudderLimit, double OffHeadingLimit, double RadiusOfTurnOrder,
-                 double RateOfTurnOrder, double OffTrackLimit, double VesselHeading);
-
-bool ParseN2k127237(const tN2kMsg &N2kMsg,
-                   tN2kOnOff &RudderLimitExceeded, tN2kOnOff &OffHeadingLimitExceeded,
-                   tN2kOnOff &OffTrackLimitExceeded, tN2kOnOff &Override,
-                   tN2kSteeringMode &SteeringMode, tN2kTurnMode &TurnMode,
-                   tN2kHeadingReference &HeadingReference,
-                   tN2kRudderDirectionOrder &CommandedRudderDirection,
-                   double &CommandedRudderAngle, double &HeadingToSteerCourse, double &Track,
-                   double &RudderLimit, double &OffHeadingLimit, double &RadiusOfTurnOrder,
-                   double &RateOfTurnOrder, double &OffTrackLimit, double &VesselHeading);
 
 #endif
