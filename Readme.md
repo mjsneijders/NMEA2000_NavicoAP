@@ -32,7 +32,7 @@ autopilot plugin uses them.
 
 * [N2k\_NavicoAP.h](N2k_NavicoAP.h): public declarations, enums, and aliases.
 * [N2k\_NavicoAP.cpp](N2k_NavicoAP.cpp): payload encoders and decoders.
-* [NavicoAPController.h](naviconAPController.h): implements class for sending and receiving messages.
+* [NavicoAPController.h](NavicoAPController.h): implements class for sending and receiving messages.
 
 
 
